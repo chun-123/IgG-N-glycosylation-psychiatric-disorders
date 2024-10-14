@@ -1,0 +1,102 @@
+################################
+#### Prepare to exposure data ####
+################################
+
+#Load related packages
+library(TwoSampleMR)
+library(readxl)
+library(data.table)
+library(stringr)
+library(MendelianRandomization)
+
+#Read IgG N-glycation data
+IgG_0<- list()
+fs <- list.files("./",pattern = "*.txt.gz$")
+IgG_0<- data.frame()
+
+for (i in fs) {
+  tryCatch({
+    IgG_0[[i]] <- fread(i, stringsAsFactors = FALSE, header = TRUE)
+    IgG_0[[i]]$PHENO <- i
+    IgG_0[[i]] <- IgG_0[[i]][, c("snp","n","effect_allele", "other_allele", "eaf", "effect", "se", "p", "PHENO")]
+    names(IgG_0[[i]]) <- c("SNP","n","effect_allele", "other_allele", "eaf", "BETA", "SE", "P", "PHENO")
+    names(IgG_0[[i]])
+   #Set significance related threshold 
+    IgG_0[[i]] <- subset(IgG_0[[i]], IgG_0[[i]]$P < 5E-8)
+    
+    if (nrow(IgG_0[[i]]) > 0) {
+     
+      IgG_0[[i]]$n <- as.numeric(as.character(IgG_0[[i]]$n))
+      IgG_0[[i]]$SNP <- as.character(IgG_0[[i]]$SNP)
+      IgG_0[[i]]$eaf <- as.numeric(as.character(IgG_0[[i]]$eaf))
+      IgG_0[[i]]$BETA <- as.numeric(as.character(IgG_0[[i]]$BETA))
+      IgG_0[[i]]$SE <- as.numeric(as.character(IgG_0[[i]]$SE))
+      IgG_0[[i]]$P <- as.numeric(as.character(IgG_0[[i]]$P))
+      IgG_0[[i]]$PHENO <- as.character(IgG_0[[i]]$PHENO)
+      
+      IgG_0[[i]] <- format_data(IgG_0[[i]],
+                              type = "exposure",
+                              phenotype_col = "PHENO",
+                              snp_col = "SNP",
+                              beta_col = "BETA",
+                              se_col = "SE",
+                              effect_allele_col = "effect_allele",
+                              other_allele_col = "other_allele",
+                              pval_col = "P",
+                              eaf_col = "eaf",
+                              samplesize_col = "n",)
+     #clump_data
+      IgG_0[[i]] <- clump_data(
+        IgG_0[[i]],
+        clump_kb = 10000,
+        clump_r2 = 0.001,
+        clump_p1 = 1,
+        clump_p2 = 1,
+        pop = "EUR"
+      )
+      
+      IgG_0 <- rbind.data.frame(IgG_0, IgG_0[[i]])
+    } else {
+      print(paste("The dataset is empty, skip file:", i))
+    }
+  }, error = function(e) {
+    print(paste("Error processing file:", i))
+    print(e)
+  })
+}
+
+# Calculate F value, R2 and screen SNPs with F>10
+Ffilter = 10
+for (i in c(1:373)) {
+  N=IgG_0[2,"samplesize.exposure"]
+IgG_0=transform(IgG_0,R2=2*((beta.exposure)^2)*eaf.exposure*(1-eaf.exposure))
+IgG_0=transform(IgG_0,F=(N-2)*R2/(1-R2))
+
+outTab=IgG_0[IgG_0$F>Ffilter,]
+  
+}
+
+
+#Remove confounding factors
+outTab=read.csv("exposure.F.csv", header=T, sep=",", check.names=F)
+snpId=outTab$SNP
+y=seq_along(snpId)
+chunks <- split(snpId, ceiling(y/100))
+out tab=data.frame()
+for(i in names(chunks)){
+  confounder=phenoscanner(
+    snpquery = chunks[[i]],
+    catalogue = "GWAS",
+    pvalue = 5e-8,
+    proxies = "None",
+    r2 = 0.8,
+    build = 37)
+  outTab=rbind(outtab, confounder$results)
+} 
+#Identify confounding factors that may affect the results, such as education, smoking, alcohol consumption, inflammatory diseases, etc., and remove SNPs associated with these factors
+delSnp=c("rs253477773"r5,"55926","rs199456","rs6964421","rs3099844","rs4424066","rs11748193","rs907091","rs4649042",
+         "rs17762769","rs481080","rs2526378","rs7192","rs1980493","rs7599083","rs2309748","rs9276726","rs9640023","rs11557466"
+         ,"rs2855804","rs4561508","rs7350980","rs7216389","rs2696561","rs4795400","rs2534669","rs2395488","rs8080583")
+IgIgG_0[!IgG_0$SNP %in% delSnp,]
+#save exposure data
+write.csv(IgG_0,"exposure_ex_confounder_with_F_R2.csv", row.names=F) #the psychiatric disorders  is handled as above

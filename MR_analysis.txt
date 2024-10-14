@@ -1,0 +1,181 @@
+################################
+#### START MR ANALYSIS HERE ####
+################################
+library(TwoSampleMR)
+library(readxl)
+library(data.table)
+library(stringr)
+
+setwd("")#Set working path
+IVs <- fread("exposure_ex_confounder_with_F_R2.csv", stringsAsFactors=FALSE, data.table=FALSE)
+IVs <- IVs[,-1]
+
+
+#### A LIST OF EXPOSURES ####
+exp_dat <- list()
+###IgG-IVs####
+IVs <- IVs[,c("SNP", "effect_allele.exposure", "other_allele.exposure", "eaf.exposure","beta.exposure", "se.exposure", "pval.exposure", "PHENO")]
+IVs$SNP    <- as.character(IVs$SNP)
+#IVs$n <- as.numeric(as.character(IVs$n))
+IVs$eaf <- as.numeric(as.character(IVs$eaf))
+IVs$BETA <- as.numeric(as.character(IVs$BETA))
+IVs$SE <- as.numeric(as.character(IVs$SE))
+##caculate SE by myself##
+#IVs$SE <- as.numeric(sqrt(((IVs$BETA)^2)/qchisq(IVs$P,1,lower.tail=F)))
+IVs$P <- as.numeric(as.character(IVs$P))
+IVs$PHENO    <- as.character(IVs$PHENO)
+#IVs$chrpos <- paste0(IVs$CHR, ":", IVs$BP)
+ 
+#Remove SNPs with a number less than 3
+pheno_counts <- table(IVs$PHENO)
+valid_pheno <- names(pheno_counts[pheno_counts >= 3])
+IVs_filtered <- IVs[IVs$PHENO %in% valid_pheno, ]
+All_exp <- unique(IVs_filtered$PHENO)
+
+#exp_dat0 <- data.frame()
+
+for (i in c(1:60)) {
+  exp_dat[[i]] <- format_data(IVs[IVs$PHENO %in% All_exp[i],],
+                              type="exposure",
+                              phenotype_col = "PHENO",
+                              snp_col = "SNP",
+                              beta_col = "BETA",
+                              se_col = "SE",
+                              effect_allele_col = "effect_allele",
+                              other_allele_col = "other_allele",
+                              pval_col = "P",
+                              eaf_col = "eaf",
+                              #pos_col = "chrpos"
+                              #samplesize_col = "n"
+                              )}
+    exp_dat0 <- rbind.data.frame(exp_dat0,exp_dat[[i]])
+
+
+
+#### READ IN OUTCOME DATASETS AND PROCESS ####
+Outcome_list <- list()
+Outcome_0 <- data.frame()
+
+Out_dat <- fread(file="PGC3_SCZ_wave3.european.autosome.public.v3.vcf.tsv.gz",
+                 stringsAsFactors=FALSE, data.table=FALSE)
+
+head(Out_dat)
+colnames(Out_dat)
+#Out_dat$se <- as.numeric(sqrt(((Out_dat$beta)^2)/qchisq(Out_dat$p_value,1,lower.tail=F)))
+head(Out_dat)
+
+Outcome <- Out_dat[,c("ID","CHROM","POS","A1","A2","BETA","SE","PVAL")]
+names(Outcome) <- c("SNP","chr", "pos","effect_allele","other_allele", "beta","se","P")
+Out_dat$beta <- log(Out_dat$OR)
+
+Outcome$PHENO <- "SCZ"
+
+head(Outcome)
+rm(Out_dat)
+
+for (i in c(1:60)) {
+  Outcome_iv <- Outcome[which(Outcome$SNP %in% exp_dat[[i]]$SNP),]  
+  Outcome_iv$SNP <- as.character(Outcome_iv$SNP)
+  Outcome_iv$effect_allele <- as.character(Outcome_iv$effect_allele)
+  Outcome_iv$other_allele <- as.character(Outcome_iv$other_allele)
+  #Outcome_iv$eaf <- as.numeric(as.character(Outcome_iv$eaf))
+  Outcome_iv$beta <- as.numeric(as.character(Outcome_iv$beta))
+  Outcome_iv$se <- as.numeric(as.character(Outcome_iv$se))
+  Outcome_iv$P <- as.numeric(as.character(Outcome_iv$P))
+  Outcome_iv$PHENO <- as.character(Outcome_iv$PHENO)
+  #Outcome_iv$N <- as.numeric(as.character(Outcome_iv$N))
+  #Outcome_iv$chrpos <- as.character(Outcome_iv$chrpos)
+  
+  
+  Outcome_list[[i]] <- format_data(Outcome_iv,
+                                   type="outcome",
+                                   phenotype_col = "PHENO",
+                                   snp_col = "SNP",
+                                   beta_col = "beta",
+                                   se_col = "se",
+                                   eaf_col = "eaf",
+                                   pval_col = "P",
+                                   effect_allele_col = "effect_allele",
+                                   other_allele_col = "other_allele",
+                                   #samplesize_col = "N",
+                                   #pos_col = "chrpos"
+  )
+  #rm(Outcome)
+  # }
+  #  else{
+  #   Outcome_iv$SNP <- as.character(Outcome_iv$SNP)
+  #   Outcome_iv$effect_allele <- as.character(Outcome_iv$effect_allele)
+  #   Outcome_iv$other_allele <- as.character(Outcome_iv$other_allele)
+  #   Outcome_iv$eaf <- as.numeric(as.character(Outcome_iv$eaf))
+  #   Outcome_iv$beta <- as.numeric(as.character(Outcome_iv$beta))
+  #  Outcome_iv$se <- as.numeric(as.character(Outcome_iv$se))
+  #  Outcome_iv$P <- as.numeric(as.character(Outcome_iv$P))
+  #   Outcome_iv$PHENO <- as.character(Outcome_iv$PHENO)
+  # Outcome_iv$chrpos <- as.character(Outcome_iv$chrpos)
+  
+  
+  #  Outcome_list[[i]] <- format_data(Outcome_iv,
+  #                                  type="outcome",
+  #                               phenotype_col = "PHENO",
+  #                                 snp_col = "SNP",
+  #                               beta_col = "beta",
+  #                              se_col = "se",
+  #                               eaf_col = "eaf",
+  #                              pval_col = "P",
+  #                             effect_allele_col = "effect_allele",
+  #                             other_allele_col = "other_allele",
+  #                             pos_col = "chrpos")
+  
+  
+  Outcome_0 <- rbind.data.frame(Outcome_0,Outcome_list[[i]])
+}
+
+###Identify final missed SNPs in outcome###
+
+missed_SNPs <- IVs[which(!IVs$SNP %in% Outcome_0$SNP),]
+missed_SNPs
+
+################################
+#### START MR ANALYSIS HERE ####
+################################
+
+
+
+####MR Start Here####
+library(ggplot2)
+library(TwoSampleMR)
+
+
+####harmonise action==2####
+
+results_action2 <- list()
+
+for (i in c(1:60)){
+  dat <- harmonise_data(
+    exposure_dat = exp_dat[[i]],
+    outcome_dat =  Outcome_list[[i]],
+    action = 2
+  )
+  
+  res <- mr(dat, 
+            method_list = c("mr_ivw_mre",
+                            "mr_ivw_fe",
+                            'mr_ivw',
+                            #"mr_two_sample_ml", 
+                            "mr_egger_regression",
+                            "mr_weighted_median"
+            ))
+  results_action2[[i]] <- res
+}
+results_action2
+results_action2IV <- do.call(rbind, results_action2)
+
+results_action2IV$LOWER <- results_action2IV$b - 1.96 * results_action2IV$se
+results_action2IV$UPPER <- results_action2IV$b + 1.96 * results_action2IV$se
+results_action2IV$index <- paste0(results_action2IV$exposure, "_", results_action2IV$method)
+write.csv(results_action2IV,'IgG_to_SCZ_act2_harmonise.csv')
+
+b<-generate_odds_ratios(mr_res = results_action2IV)
+write.csv(b,'IgG_to_SCZ_act2_harmonise-or.csv')
+
+save.image("IgG_IVs_SCZ_MR_input.Rdata")

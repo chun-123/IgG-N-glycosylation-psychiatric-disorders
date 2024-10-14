@@ -1,0 +1,130 @@
+################################
+#### START SENSITIVITY ANALYSIS HERE ####
+################################
+library(MRPRESSO)
+library(TwoSampleMR)
+library(plyr)
+require(plyr) # requires plyr for rbind.fill()
+cbind.fill <- function(...) {                                                                                                                                                       
+  transpoted <- lapply(list(...),t)                                                                                                                                                 
+  transpoted_dataframe <- lapply(transpoted, as.data.frame)                                                                                                                         
+  return (data.frame(t(rbind.fill(transpoted_dataframe))))                                                                                                                          
+}
+####  ####
+load("IgG_IVs_SCZ_MR_input.Rdata")
+##### harmonise action==2/mr_pleiotropy_test ####
+results_action2 <- list()
+
+
+for (i in c(1:60)){
+  dat <- harmonise_data(
+    exposure_dat = exp_dat[[i]],
+    outcome_dat = Outcome_list[[i]],
+    action = 2
+  )
+  
+  res <- mr_pleiotropy_test(dat)
+  #res_loo <- mr_leaveoneout(dat)
+  results_action2[[i]] <- res
+}
+results_action2
+results_action2IV <- do.call(rbind, results_action2)
+View(results_action2IV)
+
+
+write.csv(results_action2IV,'IgG_IVs_SCZ__MR_pleiotropy.csv')
+
+
+##### harmonise action==2/mr_heterogeneity ####
+results_action2 <- list()
+
+
+for (i in c(1:60)){
+  dat <- harmonise_data(
+    exposure_dat = exp_dat[[i]],
+    outcome_dat = Outcome_list[[i]],
+    action = 2
+  )
+  
+  res <- mr_heterogeneity(dat)
+  results_action2[[i]] <- res
+}
+results_action2
+results_action2IV <- do.call(rbind, results_action2)
+View(results_action2IV)
+
+write.csv(results_action2IV,'IgG_IVs_SCZ_MR_heterogeneity.csv')
+
+##### harmonise action==2/mr_Leaveoneout ####
+results_action2 <- list()
+
+
+for (i in c(1:60)){
+  dat <- harmonise_data(
+    exposure_dat = exp_dat[[i]],
+    outcome_dat = Outcome_list[[i]],
+    action = 2
+  )
+  
+  res_loo <- mr_leaveoneout(dat)
+  results_action2[[i]] <- res_loo
+}
+results_action2
+results_action2IV <- do.call(rbind, results_action2)
+View(results_action2IV)
+
+write.csv(results_action2IV,'IgG_IVs_SCZ_MR_leaveoneout.csv')
+
+
+##### harmonise action==2##mr_presso ####
+
+
+res_presso<-list()
+res_pressoorigin<-list()
+
+
+for (i in 1:60){
+  if(nrow(exp_dat[[i]])<=3) next
+  dat <- harmonise_data(
+    exposure_dat = exp_dat[[i]],
+    outcome_dat = Outcome_list[[i]],
+    action = 2
+  )
+  
+  #res_presso <- run_mr_presso(dat,NbDistribution = 1000)
+  res_pre <- mr_presso(BetaOutcome ="beta.outcome", BetaExposure = "beta.exposure", SdOutcome ="se.outcome", SdExposure = "se.exposure", 
+                       OUTLIERtest = TRUE,DISTORTIONtest = TRUE, data = dat, NbDistribution = 10000,  
+                       SignifThreshold = 0.05)
+  output_presso<-cbind(res_pre[[1]][c(2),],
+                       res_pre[["MR-PRESSO results"]][["Global Test"]][["Pvalue"]])
+  output_presso<-as.data.frame(output_presso)
+  output_presso$lo_ci <- output_presso$`Causal Estimate` - 1.96 * output_presso$Sd
+  output_presso$up_ci <- output_presso$`Causal Estimate` + 1.96 * output_presso$Sd
+  output_presso$or <- exp(output_presso$`Causal Estimate`)
+  output_presso$or_lci95 <- exp(output_presso$lo_ci)
+  output_presso$or_uci95 <- exp(output_presso$up_ci)
+  output_presso$exposure<-unique(dat$exposure)
+  output_presso$outcome<-unique(dat$outcome)
+  
+  res_presso[[i]] <-output_presso
+  res_pressoorigin[[i]]<-res_pre
+  
+}
+
+
+
+resultspresoo_allIV <- do.call(rbind.fill, res_presso)
+resultspresoorigin_allIV <- do.call(rbind, res_pressoorigin)
+
+resultspresoo_allIV$estimate <- paste0(format(round(resultspresoo_allIV$or, 2), nsmall = 2), " (", 
+                                       format(round(resultspresoo_allIV$or_lci95, 2), nsmall = 2), "-",
+                                       format(round(resultspresoo_allIV$or_uci95, 2), nsmall = 2), ")")
+row_x <- rownames(resultspresoo_allIV[which(resultspresoo_allIV$`P-value` > 0.05), ])
+resultspresoo_allIV$pvalue          <- format(resultspresoo_allIV$`P-value`, scientific = TRUE, digits = 2)
+resultspresoo_allIV[row_x,]$pvalue <- format(round(resultspresoo_allIV[row_x, ]$`P-value`, 2), nsmall = 2)
+
+write.csv(resultspresoorigin_allIV, 'IgG_IVs_SCZ_MR_PRESSO_origin.csv', row.names = FALSE)
+write.csv(resultspresoo_allIV, 'IgG_IVs_SCZ_MR_PRESSO.csv', row.names = FALSE)
+
+
+save.image("IgG_IVs_SCZ_Sensitivity.Rdata")

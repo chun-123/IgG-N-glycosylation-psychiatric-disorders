@@ -1,0 +1,1 @@
+In this code, we demonstrate the complete example code from IgG N-glycation to SCZ. Similar to other mental illnesses, modifying the relevant parameters is sufficient
